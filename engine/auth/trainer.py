@@ -1,40 +1,49 @@
 import cv2
 import numpy as np
-from PIL import Image #pillow package
+from PIL import Image
 import os
 
-path = 'engine\\auth\\samples' # Path for samples already taken
+# path of face samples
+path = 'engine/auth/samples'
 
-recognizer = cv2.face.LBPHFaceRecognizer_create() # Local Binary Patterns Histograms
-detector = cv2.CascadeClassifier("engine\\auth\\haarcascade_frontalface_default.xml")
-#Haar Cascade classifier is an effective object detection approach
+recognizer = cv2.face.LBPHFaceRecognizer_create()
+
+detector = cv2.CascadeClassifier(
+    'engine/auth/haarcascade_frontalface_default.xml'
+)
 
 
-def Images_And_Labels(path): # function to fetch the images and labels
+def Images_And_Labels(path):
 
-    imagePaths = [os.path.join(path,f) for f in os.listdir(path)]     
-    faceSamples=[]
+    # only jpg images load
+    imagePaths = [os.path.join(path, f) for f in os.listdir(path) if f.endswith(".jpg")]
+
+    faceSamples = []
     ids = []
 
-    for imagePath in imagePaths: # to iterate particular image path
+    for imagePath in imagePaths:
 
-        gray_img = Image.open(imagePath).convert('L') # convert it to grayscale
-        img_arr = np.array(gray_img,'uint8') #creating an array
+        gray_img = Image.open(imagePath).convert('L')
+        img_arr = np.array(gray_img, 'uint8')
 
         id = int(os.path.split(imagePath)[-1].split(".")[1])
+
         faces = detector.detectMultiScale(img_arr)
 
-        for (x,y,w,h) in faces:
-            faceSamples.append(img_arr[y:y+h,x:x+w])
+        for (x, y, w, h) in faces:
+            faceSamples.append(img_arr[y:y+h, x:x+w])
             ids.append(id)
 
-    return faceSamples,ids
+    return faceSamples, ids
 
-print ("Training faces. It will take a few seconds. Wait ...")
 
-faces,ids = Images_And_Labels(path)
+print("Training faces. It will take a few seconds. Wait ...")
+
+faces, ids = Images_And_Labels(path)
+
 recognizer.train(faces, np.array(ids))
 
-recognizer.write('engine\\auth\\trainer\\trainer.yml')  # Save the trained model as trainer.yml
+# Mac correct path
+recognizer.write('engine/auth/trainer/trainer.yml')
 
 print("Model trained, Now we can recognize your face.")

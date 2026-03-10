@@ -1,86 +1,127 @@
-from sys import flags
-import time
 import cv2
-import pyautogui as p
+import os
+from datetime import datetime
 
 
 def AuthenticateFace():
 
-    flag = ""
-    # Local Binary Patterns Histograms
     recognizer = cv2.face.LBPHFaceRecognizer_create()
+    recognizer.read("engine/auth/trainer/trainer.yml")
 
-    recognizer.read('engine\\auth\\trainer\\trainer.yml')  # load trained model
-    cascadePath = "engine\\auth\\haarcascade_frontalface_default.xml"
-    # initializing haar cascade for object detection approach
-    faceCascade = cv2.CascadeClassifier(cascadePath)
+    faceCascade = cv2.CascadeClassifier(
+        "engine/auth/haarcascade_frontalface_default.xml"
+    )
 
-    font = cv2.FONT_HERSHEY_SIMPLEX  # denotes the font type
+    font = cv2.FONT_HERSHEY_SIMPLEX
 
+    names = ["", "Ravikant"]
 
-    id = 2  # number of persons you want to Recognize
+    cam = cv2.VideoCapture(0)
 
-
-    names = ['', 'Ankit']  # names, leave first empty bcz counter starts from 0
-
-
-    cam = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # cv2.CAP_DSHOW to remove warning
-    cam.set(3, 640)  # set video FrameWidht
-    cam.set(4, 480)  # set video FrameHeight
-
-    # Define min window size to be recognized as a face
-    minW = 0.1*cam.get(3)
-    minH = 0.1*cam.get(4)
-
-    # flag = True
+    unknown_count = 0
 
     while True:
 
-        ret, img = cam.read()  # read the frames using the above created object
+        ret, img = cam.read()
 
-        # The function converts an input image from one color space to another
-        converted_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        if not ret:
+            continue
+
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
         faces = faceCascade.detectMultiScale(
-            converted_image,
+            gray,
             scaleFactor=1.2,
             minNeighbors=5,
-            minSize=(int(minW), int(minH)),
+            minSize=(100, 100),
         )
 
-        for(x, y, w, h) in faces:
+        for (x, y, w, h) in faces:
 
-            # used to draw a rectangle on any image
-            cv2.rectangle(img, (x, y), (x+w, y+h), (0, 255, 0), 2)
+            id, distance = recognizer.predict(gray[y:y+h, x:x+w])
 
-            # to predict on every single image
-            id, accuracy = recognizer.predict(converted_image[y:y+h, x:x+w])
+            accuracy = 100 - distance
 
-            # Check if accuracy is less them 100 ==> "0" is perfect match
-            if (accuracy < 100):
-                id = names[id]
-                accuracy = "  {0}%".format(round(100 - accuracy))
-                flag = 1
+            print("Accuracy:", accuracy)
+
+            # draw face box
+            cv2.rectangle(img, (x, y), (x+w, y+h), (0,255,0), 2)
+
+            # progress bar width
+            bar_width = int(accuracy * 2)
+
+            cv2.rectangle(img, (50, 400), (50 + bar_width, 430), (0,255,0), -1)
+            cv2.rectangle(img, (50, 400), (450, 430), (255,255,255), 2)
+
+            cv2.putText(
+                img,
+                f"Scanning Face: {accuracy:.1f}%",
+                (50, 390),
+                font,
+                0.8,
+                (0,255,0),
+                2
+            )
+
+            if accuracy > 50:
+
+                name = names[id]
+
+                cv2.putText(
+                    img,
+                    f"{name} {accuracy:.1f}%",
+                    (x, y-10),
+                    font,
+                    0.8,
+                    (0,255,0),
+                    2
+                )
+
+                cv2.imshow("Face Authentication", img)
+
+                cv2.waitKey(1500)
+
+                cam.release()
+                cv2.destroyAllWindows()
+
+                return 1
+
             else:
-                id = "unknown"
-                accuracy = "  {0}%".format(round(100 - accuracy))
-                flag = 0
 
-            cv2.putText(img, str(id), (x+5, y-5), font, 1, (255, 255, 255), 2)
-            cv2.putText(img, str(accuracy), (x+5, y+h-5),
-                        font, 1, (255, 255, 0), 1)
+                unknown_count += 1
 
-        cv2.imshow('camera', img)
+                cv2.putText(
+                    img,
+                    f"Unknown {accuracy:.1f}%",
+                    (x, y-10),
+                    font,
+                    0.8,
+                    (0,0,255),
+                    2
+                )
 
-        k = cv2.waitKey(10) & 0xff  # Press 'ESC' for exiting video
-        if k == 27:
+                if unknown_count >= 5:
+
+                    if not os.path.exists("intruders"):
+                        os.makedirs("intruders")
+
+                    filename = datetime.now().strftime("%Y%m%d_%H%M%S") + ".jpg"
+
+                    cv2.imwrite(f"intruders/{filename}", img)
+
+                    print("Intruder detected. Photo saved.")
+
+                    cam.release()
+                    cv2.destroyAllWindows()
+
+                    return 0
+
+        cv2.imshow("Face Authentication", img)
+
+        if cv2.waitKey(10) & 0xff == 27:
             break
-        if flag == 1:
-            break
-            
 
-    # Do a bit of cleanup
-    
     cam.release()
     cv2.destroyAllWindows()
-    return flag
+
+    return 0

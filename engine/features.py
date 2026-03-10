@@ -1,223 +1,230 @@
 import os
-from pipes import quote
-import re
 import sqlite3
-import struct
-import subprocess
-import time
 import webbrowser
-from playsound import playsound
 import eel
-import pyaudio
-import pyautogui
-from engine.command import speak
-
-from engine.config import ASSISTANT_NAME
-# Playing assiatnt sound function
 import pywhatkit as kit
-import pvporcupine
+import speech_recognition as sr
 
-from engine.helper import extract_yt_term, remove_words
-from hugchat import hugchat
+from engine.command import speak
+from engine.config import ASSISTANT_NAME
+from engine.helper import extract_yt_term
 
+import google.generativeai as genai
+
+
+# ---------------- DATABASE ----------------
 
 con = sqlite3.connect("jarvis.db")
 cursor = con.cursor()
 
+
+# ---------------- START SOUND ----------------
+
 @eel.expose
 def playAssistantSound():
-    music_dir = "www\\assets\\audio\\start_sound.mp3"
-    playsound(music_dir)
+    from playsound import playsound
+    playsound("www/assets/audio/start_sound.mp3")
 
-    
+
+# ---------------- OPEN APPS ----------------
+
 def openCommand(query):
+
     query = query.replace(ASSISTANT_NAME, "")
     query = query.replace("open", "")
-    query.lower()
 
-    app_name = query.strip()
+    app_name = query.strip().lower()
 
-    if app_name != "":
+    if app_name == "":
+        return
 
-        try:
-            cursor.execute(
-                'SELECT path FROM sys_command WHERE name IN (?)', (app_name,))
-            results = cursor.fetchall()
+    try:
 
-            if len(results) != 0:
-                speak("Opening "+query)
-                os.startfile(results[0][0])
+        # check system apps
+        cursor.execute(
+            "SELECT path FROM sys_command WHERE name=?",
+            (app_name,)
+        )
 
-            elif len(results) == 0: 
-                cursor.execute(
-                'SELECT url FROM web_command WHERE name IN (?)', (app_name,))
-                results = cursor.fetchall()
-                
-                if len(results) != 0:
-                    speak("Opening "+query)
-                    webbrowser.open(results[0][0])
+        result = cursor.fetchone()
 
-                else:
-                    speak("Opening "+query)
-                    try:
-                        os.system('start '+query)
-                    except:
-                        speak("not found")
-        except:
-            speak("some thing went wrong")
+        if result:
 
-       
+            speak("Opening " + app_name)
+
+            os.system(f'open "{result[0]}"')
+
+            return
+
+        # check web commands
+        cursor.execute(
+            "SELECT url FROM web_command WHERE name=?",
+            (app_name,)
+        )
+
+        result = cursor.fetchone()
+
+        if result:
+
+            speak("Opening " + app_name)
+
+            webbrowser.open(result[0])
+
+            return
+
+        speak("Application not found")
+
+    except Exception as e:
+
+        print("Open command error:", e)
+
+        speak("Something went wrong")
+
+
+# ---------------- YOUTUBE ----------------
 
 def PlayYoutube(query):
+
     search_term = extract_yt_term(query)
-    speak("Playing "+search_term+" on YouTube")
+
+    if search_term == "":
+        speak("What should I play?")
+        return
+
+    speak("Playing " + search_term + " on YouTube")
+
     kit.playonyt(search_term)
 
 
-def hotword():
-    porcupine=None
-    paud=None
-    audio_stream=None
-    try:
-       
-        # pre trained keywords    
-        porcupine=pvporcupine.create(keywords=["jarvis","alexa"]) 
-        paud=pyaudio.PyAudio()
-        audio_stream=paud.open(rate=porcupine.sample_rate,channels=1,format=pyaudio.paInt16,input=True,frames_per_buffer=porcupine.frame_length)
-        
-        # loop for streaming
-        while True:
-            keyword=audio_stream.read(porcupine.frame_length)
-            keyword=struct.unpack_from("h"*porcupine.frame_length,keyword)
+# ---------------- GEMINI AI ----------------
 
-            # processing keyword comes from mic 
-            keyword_index=porcupine.process(keyword)
+genai.configure(api_key="AIzaSyCYOpuyL5Mt9ccUo6CL0yMNV_BbWCNBoHw")
 
-            # checking first keyword detetcted for not
-            if keyword_index>=0:
-                print("hotword detected")
-
-                # pressing shorcut key win+j
-                import pyautogui as autogui
-                autogui.keyDown("win")
-                autogui.press("j")
-                time.sleep(2)
-                autogui.keyUp("win")
-                
-    except:
-        if porcupine is not None:
-            porcupine.delete()
-        if audio_stream is not None:
-            audio_stream.close()
-        if paud is not None:
-            paud.terminate()
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 
-
-# find contacts
-def findContact(query):
-    
-    words_to_remove = [ASSISTANT_NAME, 'make', 'a', 'to', 'phone', 'call', 'send', 'message', 'wahtsapp', 'video']
-    query = remove_words(query, words_to_remove)
+def chatBot(query):
 
     try:
-        query = query.strip().lower()
-        cursor.execute("SELECT mobile_no FROM contacts WHERE LOWER(name) LIKE ? OR LOWER(name) LIKE ?", ('%' + query + '%', query + '%'))
-        results = cursor.fetchall()
-        print(results[0][0])
-        mobile_number_str = str(results[0][0])
 
-        if not mobile_number_str.startswith('+91'):
-            mobile_number_str = '+91' + mobile_number_str
+        response = model.generate_content(query)
 
-        return mobile_number_str, query
-    except:
-        speak('not exist in contacts')
-        return 0, 0
-    
-def whatsApp(mobile_no, message, flag, name):
-    
+        answer = response.text
 
-    if flag == 'message':
-        target_tab = 12
-        jarvis_message = "message send successfully to "+name
+        print("AI:", answer)
 
-    elif flag == 'call':
-        target_tab = 7
-        message = ''
-        jarvis_message = "calling to "+name
+        speak(answer)
+
+        return answer
+
+    except Exception as e:
+
+        print("AI Error:", e)
+
+        speak("I could not connect to AI right now")
+
+
+# ---------------- ASSISTANT BRAIN ----------------
+
+def assistantBrain(query):
+
+    query = query.lower()
+
+    print("User:", query)
+
+    # ---------- OPEN WEBSITES ----------
+
+    if "open youtube" in query:
+
+        webbrowser.open("https://youtube.com")
+
+        speak("Opening YouTube")
+
+    elif "open google" in query:
+
+        webbrowser.open("https://google.com")
+
+        speak("Opening Google")
+
+    elif "open whatsapp" in query:
+
+        webbrowser.open("https://web.whatsapp.com")
+
+        speak("Opening WhatsApp")
+
+    elif "open instagram" in query:
+
+        webbrowser.open("https://instagram.com")
+
+        speak("Opening Instagram")
+
+    # ---------- PLAY MUSIC ----------
+
+    elif "play" in query:
+
+        PlayYoutube(query)
+
+    # ---------- GENERAL AI ----------
 
     else:
-        target_tab = 6
-        message = ''
-        jarvis_message = "staring video call with "+name
+
+        chatBot(query)
 
 
-    # Encode the message for URL
-    encoded_message = quote(message)
-    print(encoded_message)
-    # Construct the URL
-    whatsapp_url = f"whatsapp://send?phone={mobile_no}&text={encoded_message}"
+# ---------------- VOICE INPUT ----------------
 
-    # Construct the full command
-    full_command = f'start "" "{whatsapp_url}"'
+def takeCommand():
 
-    # Open WhatsApp with the constructed URL using cmd.exe
-    subprocess.run(full_command, shell=True)
-    time.sleep(5)
-    subprocess.run(full_command, shell=True)
-    
-    pyautogui.hotkey('ctrl', 'f')
+    r = sr.Recognizer()
 
-    for i in range(1, target_tab):
-        pyautogui.hotkey('tab')
+    with sr.Microphone() as source:
 
-    pyautogui.hotkey('enter')
-    speak(jarvis_message)
+        print("Listening...")
 
-# chat bot 
-def chatBot(query):
-    user_input = query.lower()
-    chatbot = hugchat.ChatBot(cookie_path=r"engine\cookies.json")
+        r.pause_threshold = 1
 
-    # chatbot = hugchat.ChatBot(cookie_path="engine\cookies.json")
-    id = chatbot.new_conversation()
-    chatbot.change_conversation(id)
-    response =  chatbot.chat(user_input)
-    print(response)
-    speak(response)
-    return response
+        r.adjust_for_ambient_noise(source)
 
-# android automation
+        audio = r.listen(source)
 
-def makeCall(name, mobileNo):
-    mobileNo =mobileNo.replace(" ", "")
-    speak("Calling "+name)
-    command = 'adb shell am start -a android.intent.action.CALL -d tel:'+mobileNo
-    os.system(command)
+    try:
+
+        print("Recognizing...")
+
+        query = r.recognize_google(audio, language="en-in")
+
+        print("User said:", query)
+
+        return query.lower()
+
+    except Exception as e:
+
+        print("Voice error:", e)
+
+        return ""
 
 
-# to send message
-def sendMessage(message, mobileNo, name):
-    from engine.helper import replace_spaces_with_percent_s, goback, keyEvent, tapEvents, adbInput
-    message = replace_spaces_with_percent_s(message)
-    mobileNo = replace_spaces_with_percent_s(mobileNo)
-    speak("sending message")
-    goback(4)
-    time.sleep(1)
-    keyEvent(3)
-    # open sms app
-    tapEvents(136, 2220)
-    #start chat
-    tapEvents(819, 2192)
-    # search mobile no
-    adbInput(mobileNo)
-    #tap on name
-    tapEvents(601, 574)
-    # tap on input
-    tapEvents(390, 2270)
-    #message
-    adbInput(message)
-    #send
-    tapEvents(957, 1397)
-    speak("message send successfully to "+name)
+# ---------------- MAIN EXECUTION ----------------
+
+def startExecution():
+
+    while True:
+
+        query = takeCommand()
+
+        if query == "":
+            continue
+
+        print("User:", query)
+
+        if "open" in query:
+
+            openCommand(query)
+
+        elif "play" in query:
+
+            PlayYoutube(query)
+
+        else:
+
+            assistantBrain(query)
