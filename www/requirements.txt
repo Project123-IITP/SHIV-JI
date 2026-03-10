@@ -1,0 +1,13 @@
+eel
+opencv-python
+face-recognition
+numpy
+SpeechRecognition
+pyttsx3
+pyaudio
+pvporcupine
+google-generativeai
+pillow
+requests
+setuptools
+wheel
