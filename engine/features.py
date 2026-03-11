@@ -1,21 +1,15 @@
 import os
-import sqlite3
 import webbrowser
 import eel
 import pywhatkit as kit
 import speech_recognition as sr
+import ollama
 
+from langdetect import detect
 from engine.command import speak
 from engine.config import ASSISTANT_NAME
 from engine.helper import extract_yt_term
-
-import google.generativeai as genai
-
-
-# ---------------- DATABASE ----------------
-
-con = sqlite3.connect("jarvis.db")
-cursor = con.cursor()
+from engine.memory import add_memory, get_memory
 
 
 # ---------------- START SOUND ----------------
@@ -35,50 +29,16 @@ def openCommand(query):
 
     app_name = query.strip().lower()
 
-    if app_name == "":
+    if not app_name:
         return
 
     try:
-
-        # check system apps
-        cursor.execute(
-            "SELECT path FROM sys_command WHERE name=?",
-            (app_name,)
-        )
-
-        result = cursor.fetchone()
-
-        if result:
-
-            speak("Opening " + app_name)
-
-            os.system(f'open "{result[0]}"')
-
-            return
-
-        # check web commands
-        cursor.execute(
-            "SELECT url FROM web_command WHERE name=?",
-            (app_name,)
-        )
-
-        result = cursor.fetchone()
-
-        if result:
-
-            speak("Opening " + app_name)
-
-            webbrowser.open(result[0])
-
-            return
-
-        speak("Application not found")
+        speak(f"Opening {app_name}")
+        os.system(f"open -a '{app_name}'")
 
     except Exception as e:
-
-        print("Open command error:", e)
-
-        speak("Something went wrong")
+        print("Open Error:", e)
+        speak("Application not found")
 
 
 # ---------------- YOUTUBE ----------------
@@ -87,31 +47,35 @@ def PlayYoutube(query):
 
     search_term = extract_yt_term(query)
 
-    if search_term == "":
+    if not search_term:
         speak("What should I play?")
         return
 
-    speak("Playing " + search_term + " on YouTube")
-
+    speak(f"Playing {search_term} on YouTube")
     kit.playonyt(search_term)
 
 
-# ---------------- GEMINI AI ----------------
+# ---------------- IMAGE ANALYSIS ----------------
 
-genai.configure(api_key="AIzaSyCYOpuyL5Mt9ccUo6CL0yMNV_BbWCNBoHw")
-
-model = genai.GenerativeModel("gemini-1.5-flash")
-
-
-def chatBot(query):
+@eel.expose
+def analyzeImage(image_path):
 
     try:
 
-        response = model.generate_content(query)
+        response = ollama.chat(
+            model="llava",
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Describe this image in detail",
+                    "images": [image_path]
+                }
+            ]
+        )
 
-        answer = response.text
+        answer = response["message"]["content"]
 
-        print("AI:", answer)
+        print("Vision:", answer)
 
         speak(answer)
 
@@ -119,9 +83,55 @@ def chatBot(query):
 
     except Exception as e:
 
-        print("AI Error:", e)
+        print("Image AI Error:", e)
 
-        speak("I could not connect to AI right now")
+        speak("I could not analyze the image")
+
+
+# ---------------- AI CHAT WITH MEMORY + LANGUAGE ----------------
+
+def chatBot(query):
+
+    try:
+
+        # detect user language
+        language = detect(query)
+
+        # save user message
+        add_memory("user", query)
+
+        # load memory
+        messages = get_memory()
+
+        # add language instruction
+        prompt = f"Answer in {language} language: {query}"
+
+        messages.append({
+            "role": "user",
+            "content": prompt
+        })
+
+        response = ollama.chat(
+            model="llama3",
+            messages=messages
+        )
+
+        answer = response["message"]["content"]
+
+        print("AI:", answer)
+
+        # save AI reply
+        add_memory("assistant", answer)
+
+        speak(answer)
+
+        return answer
+
+    except Exception as e:
+
+        print("Ollama Error:", e)
+
+        speak("I could not connect to the AI model")
 
 
 # ---------------- ASSISTANT BRAIN ----------------
@@ -132,43 +142,46 @@ def assistantBrain(query):
 
     print("User:", query)
 
-    # ---------- OPEN WEBSITES ----------
+    try:
 
-    if "open youtube" in query:
+        if "open youtube" in query:
+            webbrowser.open("https://youtube.com")
+            speak("Opening YouTube")
 
-        webbrowser.open("https://youtube.com")
+        elif "open google" in query:
+            webbrowser.open("https://google.com")
+            speak("Opening Google")
 
-        speak("Opening YouTube")
+        elif "open whatsapp" in query:
+            webbrowser.open("https://web.whatsapp.com")
+            speak("Opening WhatsApp")
 
-    elif "open google" in query:
+        elif "open instagram" in query:
+            webbrowser.open("https://instagram.com")
+            speak("Opening Instagram")
 
-        webbrowser.open("https://google.com")
+        elif "play" in query:
+            PlayYoutube(query)
 
-        speak("Opening Google")
+        elif "analyze image" in query or "describe image" in query:
 
-    elif "open whatsapp" in query:
+            speak("Please enter the image path")
 
-        webbrowser.open("https://web.whatsapp.com")
+            image_path = input("Image path: ")
 
-        speak("Opening WhatsApp")
+            if os.path.exists(image_path):
+                analyzeImage(image_path)
+            else:
+                speak("Image file not found")
 
-    elif "open instagram" in query:
+        else:
+            chatBot(query)
 
-        webbrowser.open("https://instagram.com")
+    except Exception as e:
 
-        speak("Opening Instagram")
+        print("Assistant Brain Error:", e)
 
-    # ---------- PLAY MUSIC ----------
-
-    elif "play" in query:
-
-        PlayYoutube(query)
-
-    # ---------- GENERAL AI ----------
-
-    else:
-
-        chatBot(query)
+        speak("Something went wrong")
 
 
 # ---------------- VOICE INPUT ----------------
@@ -182,7 +195,6 @@ def takeCommand():
         print("Listening...")
 
         r.pause_threshold = 1
-
         r.adjust_for_ambient_noise(source)
 
         audio = r.listen(source)
@@ -197,10 +209,14 @@ def takeCommand():
 
         return query.lower()
 
+    except sr.UnknownValueError:
+
+        print("Could not understand")
+        return ""
+
     except Exception as e:
 
-        print("Voice error:", e)
-
+        print("Voice Error:", e)
         return ""
 
 
@@ -212,19 +228,16 @@ def startExecution():
 
         query = takeCommand()
 
-        if query == "":
+        if not query:
             continue
 
         print("User:", query)
 
         if "open" in query:
-
             openCommand(query)
 
         elif "play" in query:
-
             PlayYoutube(query)
 
         else:
-
             assistantBrain(query)

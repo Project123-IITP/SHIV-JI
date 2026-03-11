@@ -350,3 +350,32 @@ $(function () {
 		}
 	});
 });
+
+// IMAGE UPLOAD FOR MAADHAV AI
+
+function openImageUpload(){
+
+    document.getElementById("imageInput").click()
+
+}
+
+document.addEventListener("DOMContentLoaded", function(){
+
+    let input = document.getElementById("imageInput")
+
+    if(!input) return
+
+    input.addEventListener("change", function(){
+
+        let file = this.files[0]
+
+        if(!file) return
+
+        console.log("Image Selected:", file.path)
+
+        // send image to python
+        eel.analyzeImage(file.path)
+
+    })
+
+})

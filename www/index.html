@@ -8,6 +8,8 @@
 
     <link rel="shortcut icon" href="assets/img/logo.ico" type="image/x-icon">
 
+
+
     <!-- Bootsrap -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet"
         integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
@@ -303,14 +305,31 @@
 
                                 <input type="text" class="input-field" name="chatbox" id="chatbox"
                                     placeholder="type here ... ">
-                                <button id="SendBtn" class="glow-on-hover" hidden><i class="bi bi-send"></i></button>
-                                <button id="MicBtn" class="glow-on-hover"><i class="bi bi-mic"></i></button>
+
+                                <button id="SendBtn" class="glow-on-hover" hidden>
+                                    <i class="bi bi-send"></i>
+                                </button>
+
+                                <button id="MicBtn" class="glow-on-hover">
+                                    <i class="bi bi-mic"></i>
+                                </button>
+
+                                <button id="UploadBtn" class="glow-on-hover" onclick="openImageUpload()">
+                                    <i class="bi bi-plus-lg"></i>
+                                </button>
+
                                 <button id="ChatBtn" class="glow-on-hover" data-bs-toggle="offcanvas"
-                                    data-bs-target="#offcanvasScrolling" aria-controls="offcanvasScrolling"><i
-                                        class="bi bi-chat-dots"></i></button>
-                                <button id="SettingsBtn" class="glow-on-hover"><i class="bi bi-gear"></i></button>
+                                    data-bs-target="#offcanvasScrolling">
+                                    <i class="bi bi-chat-dots"></i>
+                                </button>
+
+                                <button id="SettingsBtn" class="glow-on-hover">
+                                    <i class="bi bi-gear"></i>
+                                </button>
 
                             </div>
+
+                            <input type="file" id="imageInput" accept="image/*" style="display:none">
                         </div>
                     </div>
 
@@ -380,7 +399,7 @@
     <script src="controller.js"></script>
     <script src="/eel.js"></script>
 
-   
+
 
 
 

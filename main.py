@@ -71,3 +71,10 @@ def start():
 
 if __name__ == "__main__":
     start()
+    
+@eel.expose
+def analyze_image(path):
+
+    from engine.features import analyzeImage
+
+    return analyzeImage(path)
