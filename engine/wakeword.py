@@ -1,23 +1,27 @@
 import pvporcupine
 import pyaudio
 import struct
-
+import os
 
 def listen_wake_word():
 
+    access_key = "YOUR_ACCESS_KEY"
+
+    base_path = os.path.dirname(os.path.abspath(__file__))
+
+    keyword_path = "/Users/ravikantpandit/Desktop/Shiva-main/engine/madhav_en_mac_v4_0_0.ppn"
+
+    print("Loading keyword from:", keyword_path)
+    print("Exists:", os.path.exists(keyword_path))
+
     porcupine = pvporcupine.create(
-        access_key="+ZhgZ7Sk7VwpyVIE0quh7gpbzYdbXgBOVzydO1ZaazhAJdNpTd8AIA==",
-
-        # default wake words
-        # keywords=["jarvis", "computer"],
-
-        # custom wake word
-        keyword_paths=["engine/madhav_en_mac_0_0.ppn"]
+        access_key=access_key,
+        keyword_paths=[keyword_path]
     )
 
     pa = pyaudio.PyAudio()
 
-    audio_stream = pa.open(
+    stream = pa.open(
         rate=porcupine.sample_rate,
         channels=1,
         format=pyaudio.paInt16,
@@ -25,18 +29,14 @@ def listen_wake_word():
         frames_per_buffer=porcupine.frame_length
     )
 
-    print("Listening for wake words...")
+    print("Listening for wake word...")
 
     while True:
-
-        pcm = audio_stream.read(porcupine.frame_length)
-
+        pcm = stream.read(porcupine.frame_length)
         pcm = struct.unpack_from("h" * porcupine.frame_length, pcm)
 
         keyword_index = porcupine.process(pcm)
 
         if keyword_index >= 0:
-
-            print("Wake word detected")
-
+            print("Wake word detected!")
             return True

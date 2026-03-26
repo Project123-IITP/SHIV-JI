@@ -1,20 +1,32 @@
 import speech_recognition as sr
-import eel
 import asyncio
 import edge_tts
+import os
 from playsound import playsound
+from langdetect import detect
 
 
-# -------- VOICE SETTINGS --------
+VOICE_EN = "en-IN-PrabhatNeural"
+VOICE_HI = "hi-IN-MadhurNeural"
 
-VOICE = "en-US-AriaNeural"  # Siri like Indian female voice
+
+def detect_voice(text):
+
+    try:
+        lang = detect(text)
+
+        if lang == "hi":
+            return VOICE_HI
+        else:
+            return VOICE_EN
+
+    except:
+        return VOICE_EN
 
 
-# -------- SPEAK FUNCTION --------
+async def speak_async(text, voice):
 
-async def speak_async(text):
-
-    communicate = edge_tts.Communicate(text, VOICE)
+    communicate = edge_tts.Communicate(text, voice)
 
     await communicate.save("voice.mp3")
 
@@ -25,19 +37,15 @@ def speak(text):
 
     print("Maadhav:", text)
 
-    # UI display
-    try:
-        eel.DisplayMessage(text)
-        eel.receiverText(text)
-    except:
-        pass
+    voice = detect_voice(text)
 
-    asyncio.run(speak_async(text))
+    if os.path.exists("voice.mp3"):
+        os.remove("voice.mp3")
+
+    asyncio.run(speak_async(text, voice))
 
     playsound("voice.mp3")
 
-
-# -------- TAKE COMMAND --------
 
 def takecommand():
 
@@ -47,66 +55,20 @@ def takecommand():
 
         print("Listening...")
 
-        try:
-            eel.DisplayMessage("Listening...")
-        except:
-            pass
-
         r.pause_threshold = 1
+
         r.adjust_for_ambient_noise(source)
 
         audio = r.listen(source)
 
     try:
 
-        print("Recognizing...")
+        query = r.recognize_google(audio, language="en-IN")
 
-        query = r.recognize_google(audio, language="en-in")
+        print("User:", query)
 
-        print("User said:", query)
+        return query.lower()
 
-        try:
-            eel.DisplayMessage(query)
-        except:
-            pass
-
-    except Exception as e:
-
-        print("Say that again please...")
+    except:
 
         return ""
-
-    return query.lower()
-
-
-# -------- MAIN COMMAND SYSTEM --------
-
-@eel.expose
-def allCommands(message=1):
-
-    if message == 1:
-        query = takecommand()
-    else:
-        query = message.lower()
-
-    print("User:", query)
-
-    if query == "":
-        return
-
-    try:
-
-        from engine.features import assistantBrain
-
-        assistantBrain(query)
-
-    except Exception as e:
-
-        print("Assistant Error:", e)
-
-        speak("Sorry Ravikant, something went wrong")
-
-    try:
-        eel.ShowHood()
-    except:
-        pass
